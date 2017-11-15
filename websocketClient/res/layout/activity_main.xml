@@ -1,0 +1,25 @@
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:paddingBottom="@dimen/activity_vertical_margin"
+    android:paddingLeft="@dimen/activity_horizontal_margin"
+    android:paddingRight="@dimen/activity_horizontal_margin"
+    android:paddingTop="@dimen/activity_vertical_margin"
+    tools:context="com.example.websocketclient.MainActivity" >
+
+    <Button
+        android:id="@+id/id_bt_send"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_centerVertical="true"
+        android:text="send" />
+    
+    <EditText
+        android:id="@+id/id_et_hex"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:hint="请输入消息"
+        android:layout_above="@id/id_bt_send"/>
+
+</RelativeLayout>
