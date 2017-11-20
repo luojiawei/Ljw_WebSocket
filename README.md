@@ -23,12 +23,15 @@ WebSocket并不限于以Ajax(或XHR)方式通信，因为Ajax技术需要客户�
 > 1. 节省每次请求的header,http的header一般有几十字节。
 > 2. Server Push ,服务器可以主动传送数据给客户端。
 
-## 5. websocket协议
+## 4. websocket协议
 与http协议不同的请求/响应模式不同，Websocket在建立连接之前有一个Handshake（Opening Handshake）过程，在关闭连接前也有一个Handshake（Closing Handshake）过程，建立连接之后，双方即可双向通信。
 
 WebSocket 协议流程如下图：
 
 ![image](https://note.youdao.com/yws/public/resource/d5afd19abb45d26f2be9f28694a34bf3/xmlnote/47E9389391974B29A3D2959A87412DA6/2443)
+
+**4.1 握手**
+
 
 客户端http请求
 
@@ -94,6 +97,126 @@ Sec-WebSocket-Accept: FU4VfF/Onl1fCIZD9QIqfGWTJEM=
 
     101为服务器返回的状态码，所有非101的状态码都表示handshake并未完成。
 
+**4.2 数据帧**
+
+Websocket协议通过序列化的数据帧传输数据。数据封包协议中定义了opcode、payload length、Payload data等字段。其中要求：
+
+1. 客户端向服务器传输的数据帧必须进行掩码处理：服务器若接收到未经过掩码处理的数据帧，则必须主动关闭连接。
+2. 服务器向客户端传输的数据帧一定不能进行掩码处理。客户端若接收到经过掩码处理的数据帧，则必须主动关闭连接。
+
+
+针对上情况，发现错误的一方可向对方发送close帧（状态码是1002，表示协议错误），以关闭连接。
+
+具体数据帧格式如下图所示：
+
+![image](https://note.youdao.com/yws/public/resource/d5afd19abb45d26f2be9f28694a34bf3/xmlnote/79B9391F40DA48349EEF26E60172FCE5/2622)
+
+- FIN
+
+    标识是否为此消息的最后一个数据包，占 1 bit
+- RSV1, RSV2, RSV3: 用于扩展协议，一般为0，各占1bit
+- Opcode
+数据包类型（frame type），占4bits
+
+    0x0：标识一个中间数据包
+    
+    0x1：标识一个text类型数据包
+    
+    0x2：标识一个binary类型数据包
+    
+    0x3-7：保留
+    
+    0x8：标识一个断开连接类型数据包
+    
+    0x9：标识一个ping类型数据包
+    
+    0xA：表示一个pong类型数据包
+    
+    0xB-F：保留
+
+- MASK：占1bits
+
+    用于标识PayloadData是否经过掩码处理。如果是1，Masking-key域的数据即是掩码密钥，用于解码PayloadData。客户端发出的数据帧需要进行掩码处理，所以此位是1。
+
+- Payload length
+
+    Payload data的长度，占7bits，7+16bits，7+64bits：
+
+    1. 如果其值在0-125，则是payload的真实长度。
+    2. 如果值是126，则后面2个字节形成的16bits无符号整型数的值是payload的真实长度。注意，网络字节序，需要转换。
+    3. 如果值是127，则后面8个字节形成的64bits无符号整型数的值是payload的真实长度。注意，网络字节序，需要转换。
+    
+    这里的长度表示遵循一个原则，用最少的字节表示长度（尽量减少不必要的传输）。举例说，payload真实长度是124，在0-125之间，必须用前7位表示；不允许长度1是126或127，然后长度2是124，这样违反原则。
+
+- Payload data
+应用层数据
+
+    server解析client端的数据
+    
+    接收到客户端数据后的解析规则如下：
+
+- 1byte
+
+    1. 1bit: frame-fin，x0表示该message后续还有frame；x1表示是message的最后一个frame
+    2. 3bit: 分别是frame-rsv1、frame-rsv2和frame-rsv3，通常都是x0
+    
+    3. 4bit: frame-opcode，x0表示是延续frame；x1表示文本frame；x2表示二进制frame；x3-7保留给非控制frame；x8表示关 闭连接；x9表示ping；xA表示pong；xB-F保留给控制frame
+- 2byte
+
+    1. 1bit: Mask，1表示该frame包含掩码；0表示无掩码
+    2. 7bit、7bit+2byte、7bit+8byte: 7bit取整数值，若在0-125之间，则是负载数据长度；若是126表示，后两个byte取无符号16位整数值，是负载长度；127表示后8个 byte，取64位无符号整数值，是负载长度
+    3. 3-6byte: 这里假定负载长度在0-125之间，并且Mask为1，则这4个byte是掩码
+    4. 7-end byte: 长度是上面取出的负载长度，包括扩展数据和应用数据两部分，通常没有扩展数据；若Mask为1，则此数据需要解码，解码规则为- 1-4byte掩码循环和数据byte做异或操作。
+
+**4.3 心跳ping帧**
+
+Opcode中的值代表着这个帧的作用(0-7:数据帧 8-F:控制帧)，0x9代表ping帧。
+
+
+发送ping帧，例如：
+
+
+```
+89 80 A4 E9 5C 70
+```
+
+
+默认一分钟发送一次，可通过接口setConnectionLostTimeout( int connectionLostTimeout )去修改发送间隔时间（单位是秒）
+
+当接收到ping帧的时候,应该返回一个pong帧,而且,ping帧可能带有数据,那么pong帧也需要带上ping过来的数据并返回。
+
+**4.4 关闭帧**
+
+Opcode中的值代表着这个帧的作用(0-7:数据帧 8-F:控制帧)，0x8代表关闭帧。
+
+发送一个关闭帧，例如：
+
+
+```
+88 82 79 01 D1 A3 7A E9
+```
+
+
+- 当接收到关闭帧这个控制帧后,应该 尽快吧没有发送完毕的数据发送完(例如分片),然后再响应一个关闭帧.
+- 关闭帧内可能会有数据,可以用来说明关闭的理由等等,但是没有规定是人类可读语言,所以不一定是字符串
+
+当连接不需要继续存在时,就可以结束了
+基本流程是:
+
+1. 一端发送一个 关闭帧
+2. 另外一端再响应一个关闭帧
+3. 断开TCP
+
+完成这三步即可,但是,存在特殊情况
+
+- 有一端的程序关闭了,TCP连接直接关闭,并没有发送 关闭帧
+- 有一端的程序发送关闭帧以后,马上断开了TCP,另外一端发送关闭帧的时候,报错了
+
+我就被以上的坑坑过,所以要注意一下,当TCP连接出错时,直接当成已经关闭即可
+如果 浏览器发送关闭帧,服务器没有响应的话,大概会在30-60秒左右会断开TCP,所以不需要怕发了关闭帧缺没有断开TCP(但如果是自己实现的客户端就要注意了!!!)
+
+经过 **TCP连接 → 握手协议 → 数据传输 → 连接结束** 就基本走完一个websocket流程了。
+
 ## 5. websocket使用
 
 **5.1 下载Java-WebSocket-1.3.6.jar**
@@ -115,8 +238,6 @@ C:\Users\用户名\.gradle\caches\modules-2\files-2.1\org.java-websocket\Java-We
 
 
 **5.2 android websocket服务端**
-
-
     
 ```java
 public class WebsocketServer extends WebSocketServer {
