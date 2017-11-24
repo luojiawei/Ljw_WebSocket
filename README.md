@@ -380,6 +380,8 @@ private void connectServer() {
 web客户端界面如下：
 ![image](https://note.youdao.com/yws/public/resource/d5afd19abb45d26f2be9f28694a34bf3/xmlnote/DF55FD9B3E134A98A09BB4D4B0F96E6F/2544)
     
+
+如果需要发送二进制数据，可参考[《Js Websocket 发送二进制》](https://github.com/luojiawei/WebSocket/tree/master/webClient)
     
 ##     6.参考资料
 https://github.com/TooTallNate/Java-WebSocket
